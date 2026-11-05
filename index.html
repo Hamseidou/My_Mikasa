@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Jeu Tentation</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;1,9..144,400&family=DM+Sans:wght@400;500;600&display=swap">
+<style>
+[hidden]{display:none!important}
+html,body{margin:0}
+/* Concept: une carte centrée sur fond nuit. Jauge de tentation en haut, une question par écran, la dernière question a un bouton Non qui fuit. */
+:root{
+  --bg:#15132b;
+  --surface:#201d42;
+  --line:#36326a;
+  --fg:#f5eefc;
+  --muted:#a9a3cf;
+  --accent:#ff8f7a;
+  --accent-ink:#2a1020;
+  --display:'Fraunces',Georgia,'Times New Roman',serif;
+  --body:'DM Sans',system-ui,-apple-system,'Segoe UI',sans-serif;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{
+  background:var(--bg);color:var(--fg);font-family:var(--body);font-size:16px;line-height:1.5;
+  min-height:100vh;display:flex;align-items:center;justify-content:center;
+  padding-block:24px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));
+  padding-right:max(16px,env(safe-area-inset-right,0px));
+  background-image:radial-gradient(circle at 20% 0%,#2b2660 0,transparent 55%),radial-gradient(circle at 90% 100%,#3a1f4d 0,transparent 50%);
+  background-attachment:fixed;
+}
+.card{
+  width:100%;max-width:420px;background:var(--surface);border:1px solid var(--line);border-radius:20px;
+  padding:26px 22px 26px;text-align:center;box-shadow:0 24px 60px rgba(0,0,0,.35);
+}
+.gauge{margin:0 0 22px;text-align:left}
+.gauge-top{display:flex;justify-content:space-between;font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin-bottom:8px}
+.track{height:8px;border-radius:99px;background:var(--bg);border:1px solid var(--line);overflow:hidden}
+.fill{height:100%;width:0;background:linear-gradient(90deg,#ff8f7a,#ff5f8f);border-radius:99px;transition:width .6s ease}
+.tag{font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:var(--muted);margin:0 0 12px}
+h1{font-family:var(--display);font-weight:500;font-size:clamp(26px,7.5vw,34px);line-height:1.2;margin:0 0 8px;text-wrap:balance}
+h1 em{font-style:italic;color:var(--accent)}
+.sub{color:var(--muted);margin:0 0 6px;font-size:15px}
+.screen{animation:in .45s ease both}
+@keyframes in{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+.opts{display:grid;gap:10px;margin-top:20px}
+.btn{font-family:var(--body);font-size:17px;font-weight:600;border-radius:12px;border:1px solid transparent;padding:14px 22px;cursor:pointer;min-height:48px}
+.btn:focus-visible,.opt:focus-visible{outline:3px solid var(--fg);outline-offset:3px}
+.primary{background:var(--accent);color:var(--accent-ink)}
+.opt{
+  background:transparent;color:var(--fg);border:1px solid var(--line);border-radius:12px;padding:13px 14px;min-height:48px;
+  font-family:var(--body);font-size:16px;font-weight:500;cursor:pointer;text-align:center
+}
+.opt[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.opts.done .opt:not([aria-pressed="true"]){opacity:.45}
+.react{min-height:48px;margin:16px 0 0;font-style:italic;color:var(--fg);font-size:16px}
+.next{margin-top:6px;width:100%}
+.next[hidden]{display:none!important}
+.arena{position:relative;height:150px;margin-top:22px}
+.yes{position:absolute;left:12%;top:18px;transition:transform .25s ease}
+.no{
+  background:transparent;color:var(--muted);border-color:var(--line);position:absolute;right:12%;top:18px;
+  transition:left .22s ease,top .22s ease,transform .22s ease,opacity .4s ease;touch-action:none;
+}
+.no.gone{opacity:0;pointer-events:none}
+.quip{position:absolute;left:0;right:0;bottom:6px;margin:0;font-size:14px;color:var(--muted);min-height:22px;font-style:italic}
+.big{font-family:var(--display);font-size:64px;line-height:1;margin:6px 0 4px;color:var(--accent);font-variant-numeric:tabular-nums}
+textarea{
+  width:100%;background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:12px;padding:12px;
+  font-family:var(--body);font-size:16px;resize:vertical;min-height:72px;margin-top:16px
+}
+textarea::placeholder{color:var(--muted)}
+.full{width:100%;display:block;margin-top:16px;text-align:center;text-decoration:none}
+.note{font-size:13px;color:var(--muted);margin:14px 0 0}
+@media (prefers-reduced-motion:reduce){.screen,.fill,.yes,.no{animation:none;transition:none}}
+</style>
+</head>
+<body>
+
+<main class="card" id="app">
+  <div class="gauge">
+    <div class="gauge-top"><span>Niveau de tentation</span><span id="pct">0 %</span></div>
+    <div class="track"><div class="fill" id="fill"></div></div>
+  </div>
+  <section class="screen" id="stage"></section>
+</main>
+
+<script>
+/* ====== À PERSONNALISER ====== */
+var CONFIG = {
+  name: "My Mikasa 🙌",
+  whatsapp: "23566289061",   // numéro qui reçoit le résultat, sans + ni espaces
+  gauge: [14, 31, 48, 63, 80, 97]
+};
+var QUESTIONS = [
+  { q: "Ton style de chaussures ?",
+    opts: [
+      ["Talons 👠", "Hmm… toi, je te vois plutôt en baskets 😏"],
+      ["Baskets Nike 👟", "Je savais. Rien ne te va mieux."],
+      ["Ça dépend de qui m'accompagne", "Réponse dangereuse. J'adore."]
+    ] },
+  { q: "Ce qui te fait craquer chez quelqu'un ?",
+    opts: [
+      ["Le regard", "Noté. Je vais soigner mes regards 😌"],
+      ["L'humour", "Ça tombe bien, j'en ai en réserve."],
+      ["La voix", "Intéressant… je note."],
+      ["L'attention", "Bonne réponse. Elle compte beaucoup."]
+    ] },
+  { q: "Ce qui t'énerve le plus ?",
+    opts: [
+      ["Qu'on m'ignore", "Message reçu. Difficile de t'ignorer, de toute façon."],
+      ["Qu'on me fasse attendre", "Je vais être rapide alors 😉"],
+      ["Qu'on me mente", "Je serai honnête. Presque tout le temps."]
+    ] },
+  { q: "Ta tentation du moment ?",
+    opts: [
+      ["Un chocolat 🍫", "Classique. Mais je suis plus fondant."],
+      ["Un câlin", "Tu sais ce qu'on dit : les câlins, ça s'accumule."],
+      ["Un secret", "Tu es curieuse. Moi aussi."],
+      ["Quelqu'un 😏", "Je ne dirai rien. Je souris, c'est tout."]
+    ] },
+  { q: "Face à une tentation, tu fais quoi ?",
+    opts: [
+      ["Je résiste", "Courageuse. Pour l'instant."],
+      ["Je craque", "Franche. J'aime ça."],
+      ["Je fais semblant de résister", "On se comprend déjà 😌"]
+    ] },
+  { q: "Question sur moi : je pense à toi plus que je ne devrais ?",
+    special: true }
+];
+/* ============================= */
+
+var $ = function(id){ return document.getElementById(id); };
+var stage = $("stage"), idx = -1, answers = [];
+
+function setGauge(v){ $("fill").style.width = v + "%"; $("pct").textContent = v + " %"; }
+function esc(s){ return String(s).replace(/[&<>"]/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]; }); }
+
+function intro(){
+  stage.innerHTML =
+    '<p class="tag">Pour ' + esc(CONFIG.name) + '</p>' +
+    '<h1>Petit test, <em>rien de sérieux</em> 😏</h1>' +
+    '<p class="sub">6 questions, 1 minute. Pas de mauvaise réponse.</p>' +
+    '<button class="btn primary full" id="go" type="button">Je joue</button>';
+  $("go").addEventListener("click", next);
+}
+
+function next(){
+  idx++;
+  stage.style.animation = "none"; void stage.offsetWidth; stage.style.animation = "";
+  if (idx >= QUESTIONS.length) return result();
+  var Q = QUESTIONS[idx];
+  if (Q.special) return special(Q);
+  var html = '<p class="tag">Question ' + (idx+1) + ' sur ' + QUESTIONS.length + '</p>' +
+    '<h1>' + esc(Q.q) + '</h1><div class="opts" id="opts">';
+  Q.opts.forEach(function(o, i){ html += '<button class="opt" type="button" data-i="' + i + '" aria-pressed="false">' + esc(o[0]) + '</button>'; });
+  html += '</div><p class="react" id="react" aria-live="polite"></p>' +
+    '<button class="btn primary next" id="nx" type="button" hidden>Continuer</button>';
+  stage.innerHTML = html;
+  var box = $("opts");
+  box.addEventListener("click", function(e){
+    var b = e.target.closest(".opt"); if (!b) return;
+    var i = +b.getAttribute("data-i");
+    Array.prototype.forEach.call(box.children, function(c){ c.setAttribute("aria-pressed", c === b ? "true" : "false"); });
+    box.classList.add("done");
+    answers[idx] = Q.opts[i][0];
+    $("react").textContent = Q.opts[i][1];
+    $("nx").hidden = false;
+    setGauge(CONFIG.gauge[idx]);
+  });
+  $("nx").addEventListener("click", next);
+}
+
+/* ---- Dernière question : le Non fuit ---- */
+var quips = ["Tu es sûre ?", "Réfléchis bien…", "Le bouton s'enfuit.", "Il est essoufflé.", "Le bouton est fatigué, laisse-le tranquille.", "Bon. Il ne reviendra plus."];
+function special(Q){
+  stage.innerHTML = '<p class="tag">Question ' + (idx+1) + ' sur ' + QUESTIONS.length + '</p>' +
+    '<h1>' + esc(Q.q) + '</h1>' +
+    '<div class="arena" id="arena"><button class="btn primary yes" id="yes" type="button">Oui</button>' +
+    '<button class="btn no" id="no" type="button">Non</button><p class="quip" id="quip" aria-live="polite"></p></div>';
+  var no = $("no"), yes = $("yes"), arena = $("arena"), tries = 0;
+  function overlaps(x, y, w, h){
+    var l = yes.offsetLeft-12, t = yes.offsetTop-12, r = yes.offsetLeft+yes.offsetWidth+12, b = yes.offsetTop+yes.offsetHeight+12;
+    return x < r && x+w > l && y < b && y+h > t;
+  }
+  function dodge(e){
+    if (e) e.preventDefault();
+    if (no.classList.contains("gone")) return;
+    tries++;
+    $("quip").textContent = quips[Math.min(tries-1, quips.length-1)];
+    if (tries >= quips.length) {
+      no.classList.add("gone"); no.setAttribute("aria-hidden","true"); no.tabIndex = -1;
+      yes.style.transform = "scale(1.25)"; return;
+    }
+    var aw = arena.clientWidth, ah = arena.clientHeight - 36, bw = no.offsetWidth, bh = no.offsetHeight, cx = no.offsetLeft, nx, ny, n = 0;
+    do { nx = Math.random()*(aw-bw); ny = Math.random()*(ah-bh); n++; }
+    while (n < 20 && (Math.abs(nx-cx) < aw*0.3 || overlaps(nx, ny, bw, bh)));
+    no.style.right = "auto"; no.style.left = nx + "px"; no.style.top = Math.max(0, ny) + "px";
+    no.style.transform = "scale(" + Math.max(0.6, 1 - tries*0.07) + ")";
+    yes.style.transform = "scale(" + (1 + tries*0.05) + ")";
+  }
+  no.addEventListener("pointerdown", dodge);
+  no.addEventListener("pointerenter", function(e){ if (e.pointerType === "mouse") dodge(e); });
+  no.addEventListener("click", function(e){ e.preventDefault(); });
+  no.addEventListener("keydown", function(e){ if (e.key === "Enter" || e.key === " ") dodge(e); });
+  yes.addEventListener("click", function(){ answers[idx] = "Oui 😏"; setGauge(CONFIG.gauge[idx]); next(); });
+}
+
+/* ---- Résultat ---- */
+function result(){
+  var short = ["Chaussures", "Craque pour", "Énervée par", "Tentation", "Face à la tentation"];
+  var lines = short.map(function(s, i){ return "- " + s + " : " + answers[i]; }).join("\n");
+  stage.innerHTML =
+    '<p class="tag">Résultat</p>' +
+    '<p class="big">97 %</p>' +
+    '<h1>Tentation <em>difficile à ignorer</em></h1>' +
+    '<p class="sub">Tu viens de jouer et de répondre Oui à la dernière. Je note tout 😌</p>' +
+    '<textarea id="word" placeholder="Un mot pour moi (facultatif)…" aria-label="Un mot pour moi"></textarea>' +
+    '<a class="btn primary full" id="wa" href="#" target="_blank" rel="noopener">Envoyer mon résultat</a>' +
+    '<p class="note">Ton résultat n\'arrive que si tu l\'envoies dans WhatsApp.</p>';
+  function link(){
+    var w = $("word").value.trim();
+    var msg = "Mon résultat : tentation 97 % 😏\n" + lines + (w ? "\nMon mot : " + w : "");
+    $("wa").href = "https://wa.me/" + CONFIG.whatsapp + "?text=" + encodeURIComponent(msg);
+  }
+  link(); $("word").addEventListener("input", link);
+}
+intro();
+</script>
+
+</body>
+</html>
